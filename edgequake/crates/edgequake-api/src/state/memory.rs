@@ -111,8 +111,12 @@ impl AppState {
         }
 
         // Use ProviderFactory for auto-detection
-        let (llm_provider, embedding_provider) =
+        let (llm_provider, default_embedding_provider) =
             ProviderFactory::from_env().expect("Failed to create LLM provider from environment");
+
+        // Hybrid mode: allow a separate embedding provider via EDGEQUAKE_EMBEDDING_PROVIDER
+        let embedding_provider =
+            super::resolve_embedding_provider_from_env(&default_embedding_provider);
 
         // Get embedding dimension from provider for vector storage
         let embedding_dim = embedding_provider.dimension();

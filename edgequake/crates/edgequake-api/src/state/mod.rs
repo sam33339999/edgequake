@@ -92,6 +92,74 @@ use sqlx::PgPool;
 
 // ── Shared Utility ────────────────────────────────────────────────────────
 
+/// Resolve the embedding provider from environment variables.
+///
+/// Supports hybrid mode where the chat (LLM) and embedding providers differ.
+/// When `EDGEQUAKE_EMBEDDING_PROVIDER` is set, it overrides the embedding
+/// provider chosen by `ProviderFactory::from_env()`, which is otherwise
+/// based solely on `EDGEQUAKE_LLM_PROVIDER`.
+///
+/// # Environment Variables
+///
+/// | Variable                          | Purpose                                      |
+/// |-----------------------------------|----------------------------------------------|
+/// | `EDGEQUAKE_EMBEDDING_PROVIDER`    | Override embedding provider (e.g., `ollama`) |
+/// | `EDGEQUAKE_EMBEDDING_MODEL`       | Override embedding model name                |
+/// | `EDGEQUAKE_DEFAULT_EMBEDDING_DIMENSION` | Override embedding vector dimension   |
+///
+/// # Returns
+///
+/// Returns `Some(provider)` if `EDGEQUAKE_EMBEDDING_PROVIDER` is set and a
+/// provider can be created, `None` otherwise (caller uses the factory default).
+pub(crate) fn resolve_embedding_provider_from_env(
+    default_embedding_provider: &Arc<dyn edgequake_llm::traits::EmbeddingProvider>,
+) -> Arc<dyn edgequake_llm::traits::EmbeddingProvider> {
+    use edgequake_core::types::Workspace;
+    use edgequake_llm::ProviderFactory;
+
+    let embedding_provider_name = match std::env::var("EDGEQUAKE_EMBEDDING_PROVIDER") {
+        Ok(v) if !v.is_empty() => v,
+        _ => return Arc::clone(default_embedding_provider),
+    };
+
+    // Determine model: explicit env var → default for provider
+    let embedding_model = std::env::var("EDGEQUAKE_EMBEDDING_MODEL").unwrap_or_else(|_| {
+        crate::safety_limits::default_embedding_model_for_provider(&embedding_provider_name)
+            .to_string()
+    });
+
+    // Determine dimension: explicit env var → auto-detect from model name
+    let embedding_dimension = std::env::var("EDGEQUAKE_DEFAULT_EMBEDDING_DIMENSION")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| Workspace::detect_dimension_from_model(&embedding_model));
+
+    match ProviderFactory::create_embedding_provider(
+        &embedding_provider_name,
+        &embedding_model,
+        embedding_dimension,
+    ) {
+        Ok(provider) => {
+            tracing::info!(
+                llm_provider = %std::env::var("EDGEQUAKE_LLM_PROVIDER").unwrap_or_else(|_| "auto-detected".to_string()),
+                embedding_provider = %embedding_provider_name,
+                embedding_model = %embedding_model,
+                embedding_dimension = embedding_dimension,
+                "Hybrid mode: using separate embedding provider (EDGEQUAKE_EMBEDDING_PROVIDER)"
+            );
+            provider
+        }
+        Err(e) => {
+            tracing::warn!(
+                embedding_provider = %embedding_provider_name,
+                error = %e,
+                "Failed to create EDGEQUAKE_EMBEDDING_PROVIDER override, using default embedding provider"
+            );
+            Arc::clone(default_embedding_provider)
+        }
+    }
+}
+
 /// Create the configured BM25 reranker.
 ///
 /// Enhanced mode (default) adds:
@@ -474,5 +542,47 @@ mod tests {
         let state = AppState::test_state();
         assert!(state.storage_mode.is_memory());
         assert_eq!(state.config.workspace_id, "default");
+    }
+
+    #[test]
+    fn test_resolve_embedding_provider_no_override_uses_default() {
+        // Ensure env var is cleared
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_PROVIDER");
+
+        let mock_provider: Arc<dyn edgequake_llm::traits::EmbeddingProvider> =
+            Arc::new(edgequake_llm::MockProvider::new());
+
+        let result = resolve_embedding_provider_from_env(&mock_provider);
+        // Should return the default (mock) because no env override
+        assert_eq!(result.name(), mock_provider.name());
+    }
+
+    #[test]
+    fn test_resolve_embedding_provider_empty_override_uses_default() {
+        std::env::set_var("EDGEQUAKE_EMBEDDING_PROVIDER", "");
+
+        let mock_provider: Arc<dyn edgequake_llm::traits::EmbeddingProvider> =
+            Arc::new(edgequake_llm::MockProvider::new());
+
+        let result = resolve_embedding_provider_from_env(&mock_provider);
+        assert_eq!(result.name(), mock_provider.name());
+
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_PROVIDER");
+    }
+
+    #[test]
+    fn test_resolve_embedding_provider_mock_override() {
+        std::env::set_var("EDGEQUAKE_EMBEDDING_PROVIDER", "mock");
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_MODEL");
+        std::env::remove_var("EDGEQUAKE_DEFAULT_EMBEDDING_DIMENSION");
+
+        let default_provider: Arc<dyn edgequake_llm::traits::EmbeddingProvider> =
+            Arc::new(edgequake_llm::MockProvider::new());
+
+        let result = resolve_embedding_provider_from_env(&default_provider);
+        // Mock provider should be created successfully
+        assert_eq!(result.name(), "mock");
+
+        std::env::remove_var("EDGEQUAKE_EMBEDDING_PROVIDER");
     }
 }
