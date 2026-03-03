@@ -105,6 +105,9 @@ impl AppState {
         let embedding_provider =
             super::resolve_embedding_provider_from_env(&default_embedding_provider);
 
+        tracing::info!("🤖 LLM provider: {}", llm_provider.name());
+        tracing::info!("🔡 Embedding provider: {}", embedding_provider.name());
+
         // Parse database URL to create PostgreSQL configuration
         // Format: postgresql://username:password@host:port/database
         let url = url::Url::parse(&database_url)?;
