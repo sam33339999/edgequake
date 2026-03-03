@@ -9,6 +9,8 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=flat)](https://github.com/raphaelmansuy/edgequake)
 [![Documentation](https://img.shields.io/badge/docs-available-blue.svg?style=flat)](docs/README.md)
 
+> **繁體中文**：[README.zh-TW.md](README.zh-TW.md)
+
 > **v0.4.0** — PDF → LLM Vision Pipeline: multimodal LLMs now read PDF pages as images, enabling accurate extraction of scanned documents, complex layouts, and tables. Zero-config pdfium embedded.
 
 ---
