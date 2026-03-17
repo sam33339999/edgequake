@@ -359,3 +359,67 @@ pub fn default_model_for_provider(provider_name: &str) -> &'static str {
         _ => "gpt-4.1-nano",
     }
 }
+
+/// Get the default embedding model for a given provider name.
+pub fn default_embedding_model_for_provider(provider_name: &str) -> &'static str {
+    match provider_name.to_lowercase().as_str() {
+        "openai" => "text-embedding-3-small",
+        "ollama" => "embeddinggemma",
+        "lmstudio" | "lm-studio" | "lm_studio" => "nomic-embed-text-v1.5",
+        "mock" => "mock-embedding",
+        _ => "text-embedding-3-small",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_embedding_model_for_provider_openai() {
+        assert_eq!(
+            default_embedding_model_for_provider("openai"),
+            "text-embedding-3-small"
+        );
+    }
+
+    #[test]
+    fn test_default_embedding_model_for_provider_ollama() {
+        assert_eq!(
+            default_embedding_model_for_provider("ollama"),
+            "embeddinggemma"
+        );
+    }
+
+    #[test]
+    fn test_default_embedding_model_for_provider_lmstudio() {
+        assert_eq!(
+            default_embedding_model_for_provider("lmstudio"),
+            "nomic-embed-text-v1.5"
+        );
+        assert_eq!(
+            default_embedding_model_for_provider("lm-studio"),
+            "nomic-embed-text-v1.5"
+        );
+        assert_eq!(
+            default_embedding_model_for_provider("lm_studio"),
+            "nomic-embed-text-v1.5"
+        );
+    }
+
+    #[test]
+    fn test_default_embedding_model_for_provider_mock() {
+        assert_eq!(
+            default_embedding_model_for_provider("mock"),
+            "mock-embedding"
+        );
+    }
+
+    #[test]
+    fn test_default_embedding_model_for_provider_unknown_fallback() {
+        assert_eq!(
+            default_embedding_model_for_provider("unknown-provider"),
+            "text-embedding-3-small"
+        );
+    }
+}

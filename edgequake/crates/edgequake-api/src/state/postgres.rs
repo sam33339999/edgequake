@@ -98,8 +98,15 @@ impl AppState {
         }
 
         // Create providers via factory (auto-detects from environment)
-        let (llm_provider, embedding_provider) =
+        let (llm_provider, default_embedding_provider) =
             ProviderFactory::from_env().expect("Failed to create LLM provider from environment");
+
+        // Hybrid mode: allow a separate embedding provider via EDGEQUAKE_EMBEDDING_PROVIDER
+        let embedding_provider =
+            super::resolve_embedding_provider_from_env(&default_embedding_provider);
+
+        tracing::info!("🤖 LLM provider: {}", llm_provider.name());
+        tracing::info!("🔡 Embedding provider: {}", embedding_provider.name());
 
         // Parse database URL to create PostgreSQL configuration
         // Format: postgresql://username:password@host:port/database
